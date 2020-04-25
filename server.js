@@ -51,8 +51,9 @@ function initWSClient(app, config) {
     }
 
     const addExecutions = (data) => {
-        Array.prototype.push.apply(executions, _.map(data, (row) => {
+        Array.prototype.push.apply(executions, _.compact(_.map(data, (row) => {
             let exec_date = row.exec_date
+            if (!exec_date) return void 0
             if (exec_date.slice(-1) !== 'Z') {
                 exec_date += 'Z'
             }
@@ -63,7 +64,7 @@ function initWSClient(app, config) {
                 exec_date: exec_date,
                 exec_date_unix: moment(exec_date).unix(),
             }
-        }))
+        })))
     }
 
     const fetchOldData = async (before) => {
