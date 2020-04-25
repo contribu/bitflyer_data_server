@@ -3,9 +3,10 @@ const _ = require('lodash');
 const express = require('express');
 const compression = require('compression');
 const WebSocket = require('ws');
-const DataFrame = require("dataframe-js").DataFrame;
+// const DataFrame = require("dataframe-js").DataFrame; // なぜかスタックオーバーフローになるので使わない
 const moment = require('moment');
 const fetch = require('node-fetch');
+// const loki = require('lokijs')
 
 function createServer(config) {
     const app = initServer(config);
@@ -32,15 +33,15 @@ function initServer(config) {
 
 function initWSClient(app, config) {
     const sock = new WebSocket('wss://ws.lightstream.bitflyer.com/json-rpc');
-    let df_executions = void 0;
-    const historyHours = 12;
+    // const db = new loki('bitflyer');
+    let executions = []
+    const historyHours = 6;
 
     const normalizeDf = () => {
         const minTime = moment().subtract(historyHours, 'hours').unix()
-        df_executions = df_executions
-            .filter(row => row.get('exec_date_unix') >= minTime)
-            // .dropDuplicates('id') // なぜかstack over flowになる
-            .sortBy('id');
+        executions = _.filter(executions, (obj) => {
+            return obj.exec_date_unix >= minTime
+        })
     }
 
     const sleep = async (ms) => {
@@ -49,19 +50,35 @@ function initWSClient(app, config) {
         })
     }
 
+    const addExecutions = (data) => {
+        Array.prototype.push.apply(executions, _.map(data, (row) => {
+            let exec_date = row.exec_date
+            if (exec_date.slice(-1) !== 'Z') {
+                exec_date += 'Z'
+            }
+            return {
+                id: row.id,
+                price: row.price,
+                size: row.size,
+                exec_date: exec_date,
+                exec_date_unix: moment(exec_date).unix(),
+            }
+        }))
+    }
+
     const fetchOldData = async (before) => {
         await sleep(1000);
         const url = `https://api.bitflyer.com/v1/executions?count=1000&product_code=FX_BTC_JPY&before=${before}`
         console.log('fetch ' + url)
         const data = await (await fetch(url)).json();
-        let df = new DataFrame(data, ['id', 'price', 'size', 'exec_date']);
-        df = df.withColumn('exec_date_unix', (row) => moment(row.get('exec_date')).unix())
-        df_executions = df_executions.union(df);
+        addExecutions(data)
 
         const minTime = moment().subtract(historyHours, 'hours').unix()
-        const oldDf = df.filter(row => row.get('exec_date_unix') < minTime)
-        if (oldDf.count() == 0) {
-            await fetchOldData(df.stat.min('id'))
+        const finished = _.some(data, (obj) => {
+            return obj.exec_date_unix < minTime
+        })
+        if (!finished) {
+            await fetchOldData(_.min(_.map(data, 'id')))
         }
     }
 
@@ -70,15 +87,12 @@ function initWSClient(app, config) {
     });
 
     sock.addEventListener("message", e => {
+        const isFirst = executions.length === 0;
         const data = JSON.parse(e.data).params.message;
-        let df = new DataFrame(data, ['id', 'price', 'size', 'exec_date']);
-        df = df.withColumn('exec_date_unix', (row) => moment(row.get('exec_date')).unix())
+        addExecutions(data)
 
-        if (df_executions) {
-            df_executions = df_executions.union(df);
-        } else {
-            df_executions = df;
-            fetchOldData(df_executions.stat.min('id'))
+        if (isFirst) {
+            fetchOldData(_.min(_.map(executions, 'id')))
         }
     });
 
@@ -92,10 +106,10 @@ function initWSClient(app, config) {
     });
 
     app.get('/executions', function(req, res) {
-        const stream = req.params.stream;
+        // const stream = req.params.stream;
 
         normalizeDf()
-        res.json(df_executions.toDict());
+        res.json(_.sortBy(executions, 'id'));
     });
 }
 
