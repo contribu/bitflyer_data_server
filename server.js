@@ -39,7 +39,7 @@ function initWSClient(app, config) {
         const minTime = moment().subtract(historyHours, 'hours').unix()
         df_executions = df_executions
             .filter(row => row.get('exec_date_unix') >= minTime)
-            .dropDuplicates('id')
+            // .dropDuplicates('id') // なぜかstack over flowになる
             .sortBy('id');
     }
 
