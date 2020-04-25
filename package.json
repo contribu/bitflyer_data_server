@@ -1,0 +1,22 @@
+{
+  "name": "bitflyer_data_server",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bufferutil": "^4.0.1",
+    "compression": "^1.7.4",
+    "dataframe-js": "^1.4.3",
+    "express": "^4.17.1",
+    "lodash": "^4.17.15",
+    "moment": "^2.24.0",
+    "node-fetch": "^2.6.0",
+    "utf-8-validate": "^5.0.2",
+    "ws": "^7.2.5"
+  }
+}
