@@ -36,12 +36,14 @@ function initWSClient(app, config) {
     // const db = new loki('bitflyer');
     let executions = []
     const historyHours = 6;
+    let prevLengthAfterRemove = 0
 
-    const normalizeDf = () => {
+    const removeOld = () => {
         const minTime = moment().subtract(historyHours, 'hours').unix()
         executions = _.filter(executions, (obj) => {
             return obj.exec_date_unix >= minTime
         })
+        prevLengthAfterRemove = executions.length
     }
 
     const sleep = async (ms) => {
@@ -65,6 +67,10 @@ function initWSClient(app, config) {
                 exec_date_unix: moment(exec_date).unix(),
             }
         })))
+
+        if (executions.length > 1.2 * prevLengthAfterRemove) {
+            removeOld()
+        }
     }
 
     const fetchOldData = async (before) => {
@@ -109,7 +115,6 @@ function initWSClient(app, config) {
     app.get('/executions', function(req, res) {
         // const stream = req.params.stream;
 
-        normalizeDf()
         res.json(_.sortBy(executions, 'id'));
     });
 }
