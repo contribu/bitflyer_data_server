@@ -2,7 +2,8 @@
 const _ = require('lodash');
 const express = require('express');
 const compression = require('compression');
-const WebSocket = require('ws');
+const WebSocket = require('ws')
+const ReconnectingWebSocket = require('reconnecting-websocket');
 // const DataFrame = require("dataframe-js").DataFrame; // なぜかスタックオーバーフローになるので使わない
 const moment = require('moment');
 const fetch = require('node-fetch');
@@ -46,7 +47,15 @@ function initServer(config) {
 }
 
 function initWSClient(app, config) {
-    const sock = new WebSocket('wss://ws.lightstream.bitflyer.com/json-rpc');
+    const sock = new ReconnectingWebSocket(
+        'wss://ws.lightstream.bitflyer.com/json-rpc',
+        [],
+        {
+            WebSocket: WebSocket,
+            connectionTimeout: 1000,
+            maxRetries: 10,
+        }
+    )
     // const db = new loki('bitflyer');
     let executions = []
     const historyHours = 3;
@@ -80,13 +89,18 @@ function initWSClient(app, config) {
         })
     }
 
+    const normalizeExecDate = (exec_date) => {
+        if (!exec_date) return exec_date
+        if (exec_date.slice(-1) !== 'Z') {
+            exec_date += 'Z'
+        }
+        return exec_date
+    }
+
     const addExecutions = (data) => {
         Array.prototype.push.apply(executions, _.compact(_.map(data, (row) => {
-            let exec_date = row.exec_date
+            const exec_date = normalizeExecDate(row.exec_date)
             if (!exec_date) return void 0
-            if (exec_date.slice(-1) !== 'Z') {
-                exec_date += 'Z'
-            }
             return [
                 row.id,
                 row.price,
@@ -108,8 +122,8 @@ function initWSClient(app, config) {
         addExecutions(data)
 
         const minTime = moment().subtract(historyHours, 'hours').unix()
-        const finished = _.some(executions, (obj) => {
-            return moment(obj[execDateIndex]).unix() < minTime
+        const finished = _.some(data, (obj) => {
+            return moment(normalizeExecDate(obj.exec_date)).unix() < minTime
         })
         if (!finished) {
             await fetchOldData(_.min(_.map(data, 'id')))
@@ -117,6 +131,7 @@ function initWSClient(app, config) {
     }
 
     sock.addEventListener("open", e => {
+        console.log('websocket open')
         sock.send('{"method": "subscribe","params": {"channel": "lightning_executions_FX_BTC_JPY" }}');
     });
 
@@ -138,7 +153,6 @@ function initWSClient(app, config) {
 
     sock.addEventListener('end', function() {
         console.error('Client closed due to unrecoverable WebSocket error. Please check errors above.');
-        process.exit(1);
     });
 
     app.get('/executions', function(req, res) {
