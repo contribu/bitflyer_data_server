@@ -40,10 +40,18 @@ function initWSClient(app, config) {
 
     const removeOld = () => {
         const minTime = moment().subtract(historyHours, 'hours').unix()
+        const lengthBeforeRemove = executions.length
         executions = _.filter(executions, (obj) => {
             return obj.exec_date_unix >= minTime
         })
         prevLengthAfterRemove = executions.length
+
+        const memUsage = process.memoryUsage()
+        const memStr = []
+        for (const key in memUsage) {
+            memStr.push(`${key} ${Math.round(memUsage[key] / 1024 / 1024)} MB`)
+        }
+        console.log(`removeOld ${lengthBeforeRemove} -> ${prevLengthAfterRemove}. memory usage ${memStr.join(' ')}`)
     }
 
     const sleep = async (ms) => {
