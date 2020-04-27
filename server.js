@@ -14,6 +14,20 @@ function createServer(config) {
     return app;
 };
 
+// https://stackoverflow.com/questions/37318808/what-is-the-in-place-alternative-to-array-prototype-filter
+function filterInPlace(a, condition) {
+    let i = 0, j = 0;
+
+    while (i < a.length) {
+        const val = a[i];
+        if (condition(val, i, a)) a[j++] = val;
+        i++;
+    }
+
+    a.length = j;
+    return a;
+}
+
 function initServer(config) {
     const app = express();
 
@@ -35,14 +49,20 @@ function initWSClient(app, config) {
     const sock = new WebSocket('wss://ws.lightstream.bitflyer.com/json-rpc');
     // const db = new loki('bitflyer');
     let executions = []
-    const historyHours = 6;
+    const historyHours = 3;
     let prevLengthAfterRemove = 0
+
+    const idIndex = 0
+    const priceIndex = 1
+    const sizeIndex = 2
+    const execDateIndex = 3
 
     const removeOld = () => {
         const minTime = moment().subtract(historyHours, 'hours').unix()
         const lengthBeforeRemove = executions.length
-        executions = _.filter(executions, (obj) => {
-            return obj.exec_date_unix >= minTime
+        // メモリ節約のためにinplace
+        filterInPlace(executions, (obj) => {
+            return moment(obj[execDateIndex]).unix() >= minTime
         })
         prevLengthAfterRemove = executions.length
 
@@ -67,13 +87,12 @@ function initWSClient(app, config) {
             if (exec_date.slice(-1) !== 'Z') {
                 exec_date += 'Z'
             }
-            return {
-                id: row.id,
-                price: row.price,
-                size: row.size,
-                exec_date: exec_date,
-                exec_date_unix: moment(exec_date).unix(),
-            }
+            return [
+                row.id,
+                row.price,
+                row.size,
+                exec_date,
+            ]
         })))
 
         if (executions.length > 1.2 * prevLengthAfterRemove) {
@@ -90,7 +109,7 @@ function initWSClient(app, config) {
 
         const minTime = moment().subtract(historyHours, 'hours').unix()
         const finished = _.some(data, (obj) => {
-            return obj.exec_date_unix < minTime
+            return moment(obj[execDateIndex]).unix() < minTime
         })
         if (!finished) {
             await fetchOldData(_.min(_.map(data, 'id')))
@@ -123,7 +142,28 @@ function initWSClient(app, config) {
     app.get('/executions', function(req, res) {
         // const stream = req.params.stream;
 
-        res.json(_.sortBy(executions, 'id'));
+        // メモリ節約のためにinplace
+        executions.sort()
+
+        res.write('{\n')
+
+        res.write('"id": ')
+        res.write(JSON.stringify(_.map(executions, idIndex)))
+        res.write(',\n')
+
+        res.write('"price": ')
+        res.write(JSON.stringify(_.map(executions, priceIndex)))
+        res.write(',\n')
+
+        res.write('"size": ')
+        res.write(JSON.stringify(_.map(executions, sizeIndex)))
+        res.write(',\n')
+
+        res.write('"exec_date": ')
+        res.write(JSON.stringify(_.map(executions, execDateIndex)))
+
+        res.write('\n}\n')
+        res.end()
     });
 }
 
