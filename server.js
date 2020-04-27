@@ -108,7 +108,7 @@ function initWSClient(app, config) {
         addExecutions(data)
 
         const minTime = moment().subtract(historyHours, 'hours').unix()
-        const finished = _.some(data, (obj) => {
+        const finished = _.some(executions, (obj) => {
             return moment(obj[execDateIndex]).unix() < minTime
         })
         if (!finished) {
