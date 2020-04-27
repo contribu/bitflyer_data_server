@@ -95,7 +95,7 @@ function initWSClient(app, config) {
             ]
         })))
 
-        if (executions.length > 1.2 * prevLengthAfterRemove) {
+        if (executions.length > 1.1 * prevLengthAfterRemove) {
             removeOld()
         }
     }
@@ -124,6 +124,8 @@ function initWSClient(app, config) {
         const isFirst = executions.length === 0;
         const data = JSON.parse(e.data).params.message;
         addExecutions(data)
+
+        console.log('websocket data arrived ' + data.length)
 
         if (isFirst) {
             fetchOldData(_.min(_.map(executions, 'id')))
