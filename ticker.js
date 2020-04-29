@@ -31,7 +31,7 @@ function initWSClient(app, config) {
     let ticker = void 0
 
     const updateTicker = async () => {
-        const url = 'https://api.bitflyer.com/v1/getticker'
+        const url = 'https://api.bitflyer.com/v1/getticker?product_code=FX_BTC_JPY'
         console.log('fetch ' + url)
         ticker = await (await fetch(url)).json();
     }
