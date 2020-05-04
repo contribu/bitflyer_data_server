@@ -9,6 +9,12 @@ const moment = require('moment');
 const fetch = require('node-fetch');
 // const loki = require('lokijs')
 
+const sleep = async (ms) => {
+    return new Promise((resolve) => {
+        setTimeout(resolve, ms)
+    })
+}
+
 function createServer(config) {
     const app = initServer(config);
     initWSClient(app, config);
@@ -57,9 +63,12 @@ function initWSClient(app, config) {
         }
     )
     // const db = new loki('bitflyer');
-    let executions = []
-    const historyHours = 3;
+    const symbolExecutions = {
+        'FX_BTC_JPY': [],
+        'BTC_JPY': [],
+    }
     let prevLengthAfterRemove = 0
+    const historyHours = 3
 
     const idIndex = 0
     const priceIndex = 1
@@ -67,26 +76,22 @@ function initWSClient(app, config) {
     const execDateIndex = 3
 
     const removeOld = () => {
-        const minTime = moment().subtract(historyHours, 'hours').unix()
-        const lengthBeforeRemove = executions.length
-        // メモリ節約のためにinplace
-        filterInPlace(executions, (obj) => {
-            return moment(obj[execDateIndex]).unix() >= minTime
+        prevLengthAfterRemove = 0
+        _.each(symbolExecutions, (executions, symbol) => {
+            const minTime = moment().subtract(historyHours, 'hours').unix()
+            // メモリ節約のためにinplace
+            filterInPlace(executions, (obj) => {
+                return moment(obj[execDateIndex]).unix() >= minTime
+            })
+            prevLengthAfterRemove += executions.length
         })
-        prevLengthAfterRemove = executions.length
 
         const memUsage = process.memoryUsage()
         const memStr = []
         for (const key in memUsage) {
             memStr.push(`${key} ${Math.round(memUsage[key] / 1024 / 1024)} MB`)
         }
-        console.log(`removeOld ${lengthBeforeRemove} -> ${prevLengthAfterRemove}. memory usage ${memStr.join(' ')}`)
-    }
-
-    const sleep = async (ms) => {
-        return new Promise((resolve) => {
-            setTimeout(resolve, ms)
-        })
+        console.log(`removeOld -> ${prevLengthAfterRemove}. memory usage ${memStr.join(' ')}`)
     }
 
     const normalizeExecDate = (exec_date) => {
@@ -97,8 +102,8 @@ function initWSClient(app, config) {
         return exec_date
     }
 
-    const addExecutions = (data) => {
-        Array.prototype.push.apply(executions, _.compact(_.map(data, (row) => {
+    const addExecutions = (symbol, data) => {
+        Array.prototype.push.apply(symbolExecutions[symbol], _.compact(_.map(data, (row) => {
             const exec_date = normalizeExecDate(row.exec_date)
             if (!exec_date) return void 0
             return [
@@ -109,41 +114,51 @@ function initWSClient(app, config) {
             ]
         })))
 
-        if (executions.length > 1.1 * prevLengthAfterRemove) {
+        const len = _.sum(_.map(symbolExecutions, 'length'))
+        if (len > 1.1 * prevLengthAfterRemove) {
             removeOld()
         }
     }
 
-    const fetchOldData = async (before) => {
-        await sleep(1000);
-        const url = `https://api.bitflyer.com/v1/executions?count=1000&product_code=FX_BTC_JPY&before=${before}`
+    const fetchOldData = async (symbol, before) => {
+        await sleep(2000);
+        let url = `https://api.bitflyer.com/v1/executions?count=1000&product_code=${symbol}`
+        if (before) {
+            url += `&before=${before}`
+        }
         console.log('fetch ' + url)
         const data = await (await fetch(url)).json();
-        addExecutions(data)
+        addExecutions(symbol, data)
 
         const minTime = moment().subtract(historyHours, 'hours').unix()
         const finished = _.some(data, (obj) => {
             return moment(normalizeExecDate(obj.exec_date)).unix() < minTime
         })
         if (!finished) {
-            await fetchOldData(_.min(_.map(data, 'id')))
+            await fetchOldData(symbol, _.min(_.map(data, 'id')))
         }
     }
 
     sock.addEventListener("open", e => {
         console.log('websocket open')
         sock.send('{"method": "subscribe","params": {"channel": "lightning_executions_FX_BTC_JPY" }}');
+        sock.send('{"method": "subscribe","params": {"channel": "lightning_executions_BTC_JPY" }}');
     });
 
     sock.addEventListener("message", e => {
-        const isFirst = executions.length === 0;
-        const data = JSON.parse(e.data).params.message;
-        addExecutions(data)
+        const params = JSON.parse(e.data).params
+        const channel = params.channel
+        const data = params.message
 
-        console.log('websocket data arrived ' + data.length)
+        const symbol = channel.replace('lightning_executions_', '')
+        const isFirst = symbolExecutions[symbol].length === 0;
+
+        addExecutions(symbol, data)
+
+        console.log(`websocket data arrived ${symbol} ${data.length}`)
 
         if (isFirst) {
-            fetchOldData(_.min(_.map(executions, 'id')))
+            fetchOldData(symbol, _.min(_.map(symbolExecutions[symbol], 'id')))
         }
     });
 
@@ -156,7 +171,9 @@ function initWSClient(app, config) {
     });
 
     app.get('/executions', function(req, res) {
-        // const stream = req.params.stream;
+        const symbol = req.query.symbol || 'FX_BTC_JPY';
+        const executions = symbolExecutions[symbol]
+        console.log(`GET executions ${symbol}`)
 
         // メモリ節約のためにinplace
         executions.sort()
