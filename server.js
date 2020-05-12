@@ -120,6 +120,20 @@ function initWSClient(app, config) {
         }
     }
 
+    const healthcheck = () => {
+        _.each(symbolExecutions, (executions, symbol) => {
+            const maxDate = _.max(_.map(executions, (execution) => {
+                return moment(execution[execDateIndex]).unix()
+            }))
+
+            if (maxDate < moment().unix() - 15 * 60) {
+                console.log('data not updated. restarting')
+                process.exit()
+            }
+        })
+    }
+    setInterval(healthcheck, 60 * 1000)
+
     const fetchOldData = async (symbol, before) => {
         await sleep(2000);
         let url = `https://api.bitflyer.com/v1/executions?count=1000&product_code=${symbol}`
