@@ -68,7 +68,7 @@ function initWSClient(app, config) {
         'BTC_JPY': [],
     }
     let prevLengthAfterRemove = 0
-    const historyHours = 3
+    const historyHours = 6
 
     const idIndex = 0
     const priceIndex = 1
