@@ -35,6 +35,20 @@ function filterInPlace(a, condition) {
     return a;
 }
 
+const uniqueByKeyInPlaceSorted = (a, key) => {
+    let i = 0, j = 0;
+    const last = a.length - 1
+
+    while (i < a.length) {
+        const val = a[i];
+        if (i === last || val[key] !== a[i + 1][key]) a[j++] = val;
+        i++;
+    }
+
+    a.length = j;
+    return a;
+}
+
 function initServer(config) {
     const app = express();
 
@@ -74,6 +88,7 @@ function initWSClient(app, config) {
     const priceIndex = 1
     const sizeIndex = 2
     const execDateIndex = 3
+    const execDateUnixIndex = 4
 
     const removeOld = () => {
         prevLengthAfterRemove = 0
@@ -81,9 +96,13 @@ function initWSClient(app, config) {
             const minTime = moment().subtract(historyHours, 'hours').unix()
             // メモリ節約のためにinplace
             filterInPlace(executions, (obj) => {
-                return moment(obj[execDateIndex]).unix() >= minTime
+                return obj[execDateUnixIndex] >= minTime
             })
             prevLengthAfterRemove += executions.length
+
+            // 重複排除
+            executions.sort()
+            uniqueByKeyInPlaceSorted(executions, idIndex)
         })
 
         const memUsage = process.memoryUsage()
@@ -111,6 +130,7 @@ function initWSClient(app, config) {
                 row.price,
                 row.size,
                 exec_date,
+                moment(exec_date).unix(),
             ]
         })))
 
@@ -122,9 +142,7 @@ function initWSClient(app, config) {
 
     const logStatus = () => {
         _.each(symbolExecutions, (executions, symbol) => {
-            const minDate = _.min(_.map(executions, (execution) => {
-                return moment(execution[execDateIndex]).unix()
-            }))
+            const minDate = _.min(_.map(executions, execDateUnixIndex))
 
             console.log(`${symbol} count ${executions.length} oldest ${moment.unix(minDate).utc().format()}`)
         })
@@ -133,9 +151,7 @@ function initWSClient(app, config) {
 
     const healthcheck = () => {
         _.each(symbolExecutions, (executions, symbol) => {
-            const maxDate = _.max(_.map(executions, (execution) => {
-                return moment(execution[execDateIndex]).unix()
-            }))
+            const maxDate = _.max(_.map(executions, execDateUnixIndex))
 
             if (maxDate < moment().unix() - 15 * 60) {
                 console.log('data not updated. restarting')
