@@ -120,6 +120,17 @@ function initWSClient(app, config) {
         }
     }
 
+    const logStatus = () => {
+        _.each(symbolExecutions, (executions, symbol) => {
+            const minDate = _.min(_.map(executions, (execution) => {
+                return moment(execution[execDateIndex]).unix()
+            }))
+
+            console.log(`${symbol} count ${executions.length} oldest ${moment.unix(minDate).utc().format()}`)
+        })
+    }
+    setInterval(logStatus, 10 * 1000)
+
     const healthcheck = () => {
         _.each(symbolExecutions, (executions, symbol) => {
             const maxDate = _.max(_.map(executions, (execution) => {
