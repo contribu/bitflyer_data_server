@@ -1,5 +1,9 @@
 FROM node:14.4
 
-ADD . /app
 WORKDIR /app
-RUN npm install
+
+ADD ./package.json /app/package.json
+ADD ./yarn.lock /app/yarn.lock
+RUN yarn install
+
+ADD . /app
