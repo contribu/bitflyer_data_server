@@ -89,6 +89,7 @@ function initWSClient(app, config) {
     const sizeIndex = 2
     const execDateIndex = 3
     const execDateUnixIndex = 4
+    const sideIndex = 5
 
     const removeOld = () => {
         prevLengthAfterRemove = 0
@@ -131,6 +132,7 @@ function initWSClient(app, config) {
                 row.size,
                 exec_date,
                 moment(exec_date).unix(),
+                row.side,
             ]
         })))
 
@@ -235,6 +237,10 @@ function initWSClient(app, config) {
 
         res.write('"exec_date": ')
         res.write(JSON.stringify(_.map(executions, execDateIndex)))
+
+        res.write('"side": ')
+        res.write(JSON.stringify(_.map(executions, sideIndex)))
+        res.write(',\n')
 
         res.write('\n}\n')
         res.end()
