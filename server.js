@@ -237,10 +237,10 @@ function initWSClient(app, config) {
 
         res.write('"exec_date": ')
         res.write(JSON.stringify(_.map(executions, execDateIndex)))
+        res.write(',\n')
 
         res.write('"side": ')
         res.write(JSON.stringify(_.map(executions, sideIndex)))
-        res.write(',\n')
 
         res.write('\n}\n')
         res.end()
